@@ -21,24 +21,29 @@ const PORT = process.env.PORT || 5000;
 // -----------------------------------------
 
 const uploadsDirectory = path.join(__dirname, "uploads");
+
 const dataDirectory = path.join(__dirname, "data");
+
 const submissionsFile = path.join(
   dataDirectory,
   "submissions.json"
 );
 
+// Create uploads directory
 if (!fs.existsSync(uploadsDirectory)) {
   fs.mkdirSync(uploadsDirectory, {
     recursive: true,
   });
 }
 
+// Create data directory
 if (!fs.existsSync(dataDirectory)) {
   fs.mkdirSync(dataDirectory, {
     recursive: true,
   });
 }
 
+// Create submissions.json
 if (!fs.existsSync(submissionsFile)) {
   fs.writeFileSync(
     submissionsFile,
@@ -51,38 +56,75 @@ if (!fs.existsSync(submissionsFile)) {
 // -----------------------------------------
 
 const allowedOrigins = [
+  // Production frontend URL from .env
   process.env.FRONTEND_URL,
+
+  // Local development
   "http://localhost:5173",
-  "http://localhost:3000",
+  "http://localhost:5174",
+
+  // Production frontend
+  "https://southcult.com",
+  "https://www.southcult.com",
 ].filter(Boolean);
 
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      // Allow Postman/server-side requests
-      if (!origin) {
-        return callback(null, true);
-      }
+console.log("Allowed CORS origins:", allowedOrigins);
 
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Allow requests without an Origin header
+    // such as curl, Postman, server-to-server requests, etc.
+    if (!origin) {
+      return callback(null, true);
+    }
 
-      callback(
-        new Error("Not allowed by CORS")
-      );
-    },
-    methods: ["GET", "POST", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  })
-);
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    console.error("CORS blocked origin:", origin);
+
+    return callback(
+      new Error("Not allowed by CORS")
+    );
+  },
+
+  methods: [
+    "GET",
+    "POST",
+    "PUT",
+    "PATCH",
+    "DELETE",
+    "OPTIONS",
+  ],
+
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+  ],
+
+  credentials: true,
+
+  optionsSuccessStatus: 204,
+};
+
+// Apply CORS
+app.use(cors(corsOptions));
+
+// Explicitly handle preflight requests
+app.options("*", cors(corsOptions));
 
 // -----------------------------------------
 // BODY PARSER
 // -----------------------------------------
 
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+
+app.use(
+  express.urlencoded({
+    extended: true,
+  })
+);
 
 // -----------------------------------------
 // STATIC UPLOADS
@@ -108,7 +150,10 @@ app.get("/", (req, res) => {
 // ROUTES
 // -----------------------------------------
 
-app.use("/api/otp", otpRouter);
+app.use(
+  "/api/otp",
+  otpRouter
+);
 
 app.use(
   "/api/submissions",
@@ -122,17 +167,21 @@ app.use(
 app.use((err, req, res, next) => {
   console.error("Server error:", err);
 
+  // CORS error
   if (err.message === "Not allowed by CORS") {
     return res.status(403).json({
       success: false,
-      message: "CORS policy blocked this request.",
+      message:
+        "CORS policy blocked this request.",
     });
   }
 
+  // Multer file size error
   if (err.code === "LIMIT_FILE_SIZE") {
     return res.status(413).json({
       success: false,
-      message: "File size must be less than 500 MB.",
+      message:
+        "File size must be less than 500 MB.",
     });
   }
 
@@ -153,3 +202,4 @@ app.listen(PORT, () => {
     `South Cult API running on http://localhost:${PORT}`
   );
 });
+
